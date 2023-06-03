@@ -11,10 +11,20 @@ bool keyDown = false;
 bool tapShift = false;
 bool capslock = false;
 char activeLayer = 'b';
+int leftHandBoard = 0;
 
+int RXLED = 17; // The RX LED has a defined Arduino pin
+int TXLED = 30; // The TX LED has a defined Arduino pin
+
+#define HANDEDNESS_PIN 18
 #define KEY_NULL 0xFF
 #define KEY_LAYER_UPPER 0xFE
 #define KEY_LAYER_LOWER 0xFD
+
+#define KEY_ASCII_QUOTE 0x27
+#define KEY_ASCII_DOUBLEQUOTE 0x22
+#define KEY_ASCII_COMMA 0x2C
+#define KEY_ASCII_BACKSLASH 0x5C
 
 //define the symbols on the buttons of the keypads
 char baseMapLeft[rowCount][colCount] = {
@@ -24,13 +34,43 @@ char baseMapLeft[rowCount][colCount] = {
   {KEY_NULL,KEY_NULL,KEY_NULL,KEY_LEFT_GUI,KEY_LAYER_UPPER,KEY_RETURN}
 };
 
+// This is back to front because I must have wired up the columns backwards
+char baseMapRight[rowCount][colCount] = {
+  {KEY_ESC,'p','o','i','u','y'},
+  {KEY_ASCII_QUOTE,KEY_ASCII_DOUBLEQUOTE,'l','k','j','h'},
+  {KEY_RIGHT_ALT,'/','.',KEY_ASCII_COMMA,'m','n'},
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_BACKSPACE,KEY_LAYER_LOWER,' '}
+};
+
 char upperMapLeft[rowCount][colCount] = {
   {KEY_TAB,'!','@','#','$','%'},
   {KEY_LEFT_CTRL,'1','2','3','4','5'},
-  {KEY_LEFT_SHIFT,'6','7','8','9','0'},
+  {KEY_NULL,'6','7','8','9','0'},
   {KEY_NULL,KEY_NULL,KEY_NULL,KEY_LEFT_GUI,KEY_LAYER_UPPER,KEY_RETURN}
 };
 
+// This is back to front because I must have wired up the columns backwards
+char upperMapRight[rowCount][colCount] = {
+  {KEY_ASCII_BACKSLASH,')','(','*','&','^'},
+  {'|',']','[','`','=','-'},
+  {'?','}','{','~','+','_'},
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_DELETE,KEY_LAYER_LOWER,' '}
+};
+
+char lowerMapLeft[rowCount][colCount] = {
+  {KEY_NULL,KEY_F1,KEY_F2,KEY_F3,KEY_F4,KEY_F5},
+  {KEY_NULL,'1','2','3','4','5'},
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL},
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL,KEY_LAYER_UPPER,KEY_NULL}
+};
+
+// This is back to front because I must have wired up the columns backwards
+char lowerMapRight[rowCount][colCount] = {
+  {KEY_F11,KEY_F10,KEY_F9,KEY_F8,KEY_F7,KEY_F6},
+  {KEY_NULL,KEY_NULL,KEY_RIGHT_ARROW,KEY_UP_ARROW,KEY_DOWN_ARROW,KEY_LEFT_ARROW},
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL,';',':'},
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_DELETE,KEY_LAYER_LOWER,' '}
+};
 
 void setup() {
 	Serial.begin(115200);
@@ -47,6 +87,15 @@ void setup() {
 		Serial.print(cols[x]); Serial.println(" as input");
 		pinMode(cols[x], INPUT);
 	}
+
+  // which keyboard half are we running in?
+  // pin high = left
+  // pin low = right
+  pinMode(HANDEDNESS_PIN, INPUT_PULLUP);
+  leftHandBoard = digitalRead(HANDEDNESS_PIN);
+
+  pinMode(RXLED, OUTPUT); // Set RX LED as an output
+  pinMode(TXLED, OUTPUT); // Set TX LED as an output
 }
 
 void readMatrix() {
@@ -77,12 +126,26 @@ byte checkForKeypress() {
       if (keys[colIndex][rowIndex] == 0) {
         switch (activeLayer) {
           case 'u':
-            key = upperMapLeft[rowIndex][colIndex];
+            if (leftHandBoard) {
+              key = upperMapLeft[rowIndex][colIndex];
+            } else {
+              key = upperMapRight[rowIndex][colIndex];
+            }
+            break;
+          case 'l':
+            if (leftHandBoard) {
+              key = lowerMapLeft[rowIndex][colIndex];
+            } else {
+              key = lowerMapRight[rowIndex][colIndex];
+            }
             break;
           default:
-            key = baseMapLeft[rowIndex][colIndex];
+            if (leftHandBoard) {
+              key = baseMapLeft[rowIndex][colIndex];
+            } else {
+              key = baseMapRight[rowIndex][colIndex];
+            }
         }
-
       }
     }
   }
@@ -140,6 +203,17 @@ void loop() {
         case KEY_LAYER_UPPER:
           if (activeLayer == 'b') {
             activeLayer = 'u';
+            digitalWrite(RXLED, HIGH);
+          } else {
+            activeLayer = 'b';
+            digitalWrite(RXLED, LOW);
+            digitalWrite(TXLED, LOW);
+          }
+          break;
+        case KEY_LAYER_LOWER:
+          if (activeLayer == 'b') {
+            activeLayer = 'l';
+            digitalWrite(TXLED, HIGH);
           } else {
             activeLayer = 'b';
           }
@@ -150,7 +224,10 @@ void loop() {
  
       if (transmitKey) {
         if (tapShift || capslock) {
-          Keyboard.press(KEY_LEFT_SHIFT); 
+          if (key >= 97 && key <= 122) {
+            // only use shift if its an alpha key
+            Keyboard.press(KEY_LEFT_SHIFT); 
+          }
           Keyboard.press(key); 
           Keyboard.releaseAll();
         } else {
