@@ -8,16 +8,27 @@ const int colCount = sizeof(cols)/sizeof(cols[0]);
 
 byte keys[colCount][rowCount];
 bool keyDown = false;
+bool tapShift = false;
+bool capslock = false;
+char activeLayer = 'b';
 
 #define KEY_NULL 0xFF
-#define KEY_LAYER 0xFE
+#define KEY_LAYER_UPPER 0xFE
+#define KEY_LAYER_LOWER 0xFD
 
 //define the symbols on the buttons of the keypads
 char baseMapLeft[rowCount][colCount] = {
   {KEY_TAB,'q','w','e','r','t'},
   {KEY_LEFT_CTRL,'a','s','d','f','g'},
   {KEY_LEFT_SHIFT,'z','x','c','v','b'},
-  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_LEFT_GUI,KEY_LAYER,KEY_RETURN}
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_LEFT_GUI,KEY_LAYER_UPPER,KEY_RETURN}
+};
+
+char upperMapLeft[rowCount][colCount] = {
+  {KEY_TAB,'!','@','#','$','%'},
+  {KEY_LEFT_CTRL,'1','2','3','4','5'},
+  {KEY_LEFT_SHIFT,'6','7','8','9','0'},
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_LEFT_GUI,KEY_LAYER_UPPER,KEY_RETURN}
 };
 
 
@@ -36,7 +47,6 @@ void setup() {
 		Serial.print(cols[x]); Serial.println(" as input");
 		pinMode(cols[x], INPUT);
 	}
-		
 }
 
 void readMatrix() {
@@ -60,20 +70,19 @@ void readMatrix() {
 }
 
 byte checkForKeypress() {
-  bool result = false;
   byte key = KEY_NULL;
 
 	for (int rowIndex=0; rowIndex < rowCount; rowIndex++) {
 		for (int colIndex=0; colIndex < colCount; colIndex++) {	
       if (keys[colIndex][rowIndex] == 0) {
-        result = true;
-        // Serial.print(colIndex);
-        // Serial.print(':');
-        // Serial.println(rowIndex);
-      
-        // which key
-        key = baseMapLeft[rowIndex][colIndex];
-        //Serial.println(key);
+        switch (activeLayer) {
+          case 'u':
+            key = upperMapLeft[rowIndex][colIndex];
+            break;
+          default:
+            key = baseMapLeft[rowIndex][colIndex];
+        }
+
       }
     }
   }
@@ -111,10 +120,47 @@ void loop() {
   if (key != KEY_NULL) {
     if (!keyDown) {
       //printMatrix();
+
+      bool transmitKey = false;
+
+
+      switch (key) {
+        case KEY_LEFT_SHIFT:
+        case KEY_RIGHT_SHIFT:
+          if (capslock) {
+            capslock = false;
+          } else if (tapShift) {
+            capslock = true;
+            tapShift = false;
+          } else {
+            tapShift = true;
+          }
+          
+          break;
+        case KEY_LAYER_UPPER:
+          if (activeLayer == 'b') {
+            activeLayer = 'u';
+          } else {
+            activeLayer = 'b';
+          }
+          break;
+        default:
+          transmitKey = true;
+      }
  
-      Keyboard.write(key);
-      Keyboard.releaseAll();
-      Serial.println(key);
+      if (transmitKey) {
+        if (tapShift || capslock) {
+          Keyboard.press(KEY_LEFT_SHIFT); 
+          Keyboard.press(key); 
+          Keyboard.releaseAll();
+        } else {
+          Keyboard.write(key);
+        }
+        Serial.println(key);
+
+        tapShift = false;
+      }
+
       keyDown = true;
     }
   } else {

@@ -5,3 +5,7 @@ Coded from scratch - not using QMK.
 - Code for one half only.
 - Basic key presses.
 - One layer
+
+## Stage-2
+- Add shift and capslock (tapdance mode)
+- Add uppler layer mapping and switch in/out of upper layer
