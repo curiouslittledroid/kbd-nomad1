@@ -32,6 +32,9 @@ byte keys[colCount][rowCount];
 byte keyRHKBD = KEY_NULL;
 bool keyDown = false;
 bool tapShift = false;
+bool tapCmd = false;
+bool tapOpt = false;
+bool tapCtrl = false;
 bool capslock = false;
 char activeLayer = 'b';
 int leftHandBoard = 0;
@@ -292,6 +295,14 @@ void loop() {
           Wire.endTransmission();
 
           break;
+        case KEY_LEFT_GUI:
+        case KEY_RIGHT_GUI:
+          if (tapCmd) {
+            tapCmd = false;
+          } else {
+            tapCmd = true;
+          }
+          break;
         case KEY_LAYER_UPPER:
           if (activeLayer == 'b') {
             activeLayer = 'u';
@@ -333,19 +344,32 @@ void loop() {
         }
   
         if (transmitKey) {
-          if (tapShift || capslock) {
-            if (key >= 97 && key <= 122) {
-              // only use shift if its an alpha key
-              Keyboard.press(KEY_LEFT_SHIFT); 
+          if (tapShift || capslock || tapCmd || tapOpt || tapCtrl) {
+            if (tapShift || capslock) {
+              if (key >= 97 && key <= 122) {
+                // only use shift if its an alpha key
+                Keyboard.press(KEY_LEFT_SHIFT); 
+              }
+            } else if (tapCmd) {
+              Keyboard.press(KEY_LEFT_GUI); 
+            } else if (tapOpt) {
+              Keyboard.press(KEY_LEFT_ALT); 
+            } else if (tapCtrl) {
+              Keyboard.press(KEY_LEFT_CTRL); 
             }
+
             Keyboard.press(key); 
             Keyboard.releaseAll();
           } else {
             Keyboard.write(key);
           }
+          
           Serial.println(key);
 
           tapShift = false;
+          tapCmd = false;
+          tapOpt = false;
+          tapCtrl = false;
         }
       }
     }
