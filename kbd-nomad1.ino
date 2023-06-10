@@ -7,6 +7,9 @@
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+//The (-1) parameter means that your OLED display doesn’t have a RESET pin. 
+//If your OLED display does have a RESET pin, it should be connected to a GPIO. 
+//In that case, you should pass the GPIO number as a parameter.
 #define SCREEN_ADDRESS 0x3C // See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -141,6 +144,10 @@ void setup() {
     }
 
     display.clearDisplay();
+
+    displayKeymap(activeLayer, true);
+    displayDivider();
+    displayKeymap(activeLayer, false);
   }
 }
 
@@ -172,24 +179,68 @@ void requestEventFromMaster() {
 }
 
 void displayLayer(char layer) {
-  display.clearDisplay();
-
-  display.setTextSize(1);      // Normal 1:1 pixel scale
+  display.setTextSize(2);      // Normal 1:1 pixel scale
   display.setTextColor(SSD1306_WHITE); // Draw white text
-  display.setCursor(0, 0);     // Start at top-left corner
+  display.setCursor(115, 0);     // Start at top-left corner
   display.cp437(true);         // Use full 256 char 'Code Page 437' font
 
   switch (layer) {
     case 'u':
-      display.println("Upper");
+      display.print("U");
       break;
     case 'l':
-      display.println("Lower");
+      display.print("L");
       break;
     default:
-      display.println("Base");
+      display.print("B");
   }
 
+  display.display();
+}
+
+void displayKeymap(char layer, bool left) {
+  display.setTextSize(1);      // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE); // Draw white text
+  display.cp437(true);         // Use full 256 char 'Code Page 437' font
+
+  for (int rowIndex=0; rowIndex < rowCount; rowIndex++) {
+    for (int colIndex=0; colIndex < colCount; colIndex++) {	
+      if (left) {
+        display.setCursor(colIndex * 10, rowIndex * 11);
+      } else {
+        display.setCursor(128 - 10 - colIndex * 10, rowIndex * 11);
+      }
+
+      switch (layer) {
+        case 'u':
+          if (left) {
+            display.print(upperMapLeft[rowIndex][colIndex]);
+          } else {
+            display.print(upperMapRight[rowIndex][colIndex]);
+          }
+          break;
+        case 'l':
+          if (left) {
+            display.print(lowerMapLeft[rowIndex][colIndex]);
+          } else {
+            display.print(lowerMapRight[rowIndex][colIndex]);
+          }
+          break;
+        default:
+          if (left) {
+            display.print(baseMapLeft[rowIndex][colIndex]);
+          } else {
+            display.print(baseMapRight[rowIndex][colIndex]);
+          }
+      }
+    }
+  }
+
+  display.display();
+}
+
+void displayDivider() {
+  display.drawLine(63, 0, 63, display.height()-1, SSD1306_WHITE);
   display.display();
 }
 
@@ -371,8 +422,11 @@ void loop() {
             Serial.print("Layer: ");
             Serial.println(activeLayer);
 
-            displayLayer(activeLayer);
-
+            display.clearDisplay();
+            //displayLayer(activeLayer);
+            displayKeymap(activeLayer, true);
+            displayDivider();
+            displayKeymap(activeLayer, false);
             break;
           default:
             transmitKey = true;
