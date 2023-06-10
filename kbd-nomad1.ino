@@ -1,10 +1,19 @@
 #include <Keyboard.h>
 #include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 32 // OLED display height, in pixels
+
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3C // See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define HANDEDNESS_PIN 18
 #define KEY_NULL 0xFF
-#define KEY_LAYER_UPPER 0xFE
-#define KEY_LAYER_LOWER 0xFD
+#define KEY_LAYER_UP 0xFE
+#define KEY_LAYER_DOWN 0xFD
 
 #define KEY_ASCII_QUOTE 0x27
 #define KEY_ASCII_DOUBLEQUOTE 0x22
@@ -38,7 +47,6 @@ bool tapCtrl = false;
 bool capslock = false;
 char activeLayer = 'b';
 int leftHandBoard = 0;
-byte instruction = INSTRUCTION_NULL; //instruction code from master
 
 int RXLED = 17; // The RX LED has a defined Arduino pin
 int TXLED = 30; // The TX LED has a defined Arduino pin
@@ -48,7 +56,7 @@ char baseMapLeft[rowCount][colCount] = {
   {KEY_TAB,'q','w','e','r','t'},
   {KEY_LEFT_CTRL,'a','s','d','f','g'},
   {KEY_LEFT_SHIFT,'z','x','c','v','b'},
-  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_LEFT_GUI,KEY_LAYER_UPPER,KEY_RETURN}
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_LEFT_GUI,KEY_LAYER_UP,KEY_RETURN}
 };
 
 // This is back to front because I must have wired up the columns backwards
@@ -56,14 +64,14 @@ char baseMapRight[rowCount][colCount] = {
   {KEY_ESC,'p','o','i','u','y'},
   {KEY_ASCII_QUOTE,KEY_ASCII_DOUBLEQUOTE,'l','k','j','h'},
   {KEY_RIGHT_ALT,'/','.',KEY_ASCII_COMMA,'m','n'},
-  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_BACKSPACE,KEY_LAYER_LOWER,' '}
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_BACKSPACE,KEY_LAYER_DOWN,' '}
 };
 
 char upperMapLeft[rowCount][colCount] = {
   {KEY_TAB,'!','@','#','$','%'},
   {KEY_LEFT_CTRL,'1','2','3','4','5'},
   {KEY_NULL,'6','7','8','9','0'},
-  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_LEFT_GUI,KEY_LAYER_UPPER,KEY_RETURN}
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_LEFT_GUI,KEY_LAYER_UP,KEY_RETURN}
 };
 
 // This is back to front because I must have wired up the columns backwards
@@ -71,14 +79,14 @@ char upperMapRight[rowCount][colCount] = {
   {KEY_ASCII_BACKSLASH,')','(','*','&','^'},
   {'|',']','[','`','=','-'},
   {'?','}','{','~','+','_'},
-  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_DELETE,KEY_LAYER_LOWER,' '}
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_DELETE,KEY_LAYER_DOWN,' '}
 };
 
 char lowerMapLeft[rowCount][colCount] = {
   {KEY_NULL,KEY_F1,KEY_F2,KEY_F3,KEY_F4,KEY_F5},
   {KEY_NULL,'1','2','3','4','5'},
   {KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL,'!'},
-  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL,KEY_LAYER_UPPER,KEY_NULL}
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL,KEY_LAYER_UP,KEY_NULL}
 };
 
 // This is back to front because I must have wired up the columns backwards
@@ -86,7 +94,7 @@ char lowerMapRight[rowCount][colCount] = {
   {KEY_F11,KEY_F10,KEY_F9,KEY_F8,KEY_F7,KEY_F6},
   {KEY_NULL,KEY_NULL,KEY_RIGHT_ARROW,KEY_UP_ARROW,KEY_DOWN_ARROW,KEY_LEFT_ARROW},
   {KEY_NULL,KEY_NULL,KEY_NULL,KEY_NULL,';',':'},
-  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_DELETE,KEY_LAYER_LOWER,' '}
+  {KEY_NULL,KEY_NULL,KEY_NULL,KEY_DELETE,KEY_LAYER_DOWN,' '}
 };
 
 void setup() {
@@ -124,39 +132,65 @@ void setup() {
   pinMode(TXLED, OUTPUT); // Set TX LED as an output
   digitalWrite(RXLED, LOW);
   digitalWrite(TXLED, LOW);
+
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if (leftHandBoard) {
+    if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+      Serial.println(F("SSD1306 allocation failed"));
+      for(;;); // Don't proceed, loop forever
+    }
+
+    display.clearDisplay();
+  }
 }
 
 void receiveEventFromMaster(int bytes) {
-  byte temp = Wire.read();    // read one character from the I2C
-  if (instruction == INSTRUCTION_NULL) {
-    // only take the instruction if we are not currently proccessing an instruction.
-    instruction = temp;
+  byte instruction = Wire.read();    // read one character from the I2C
 
-    switch (instruction) {
-      case INSTRUCTION_ACTIVELAYER_BASE:
-        activeLayer = 'b';
-        break;
-      case INSTRUCTION_ACTIVELAYER_LOWER:
-        activeLayer = 'l';
-        break;
-      case INSTRUCTION_ACTIVELAYER_UPPER:
-        activeLayer = 'u';
-        break;
-      case INSTRUCTION_CAPSLOCK_ON:
-        capslock = true;
-        break;
-      case INSTRUCTION_CAPSLOCK_OFF:
-        capslock = false;
-        break;
-    }
-
-    instruction = INSTRUCTION_NULL;
+  switch (instruction) {
+    case INSTRUCTION_ACTIVELAYER_BASE:
+      activeLayer = 'b';
+      break;
+    case INSTRUCTION_ACTIVELAYER_LOWER:
+      activeLayer = 'l';
+      break;
+    case INSTRUCTION_ACTIVELAYER_UPPER:
+      activeLayer = 'u';
+      break;
+    case INSTRUCTION_CAPSLOCK_ON:
+      capslock = true;
+      break;
+    case INSTRUCTION_CAPSLOCK_OFF:
+      capslock = false;
+      break;
   }
 }
 
 void requestEventFromMaster() {
   Wire.write(keyRHKBD);
   keyRHKBD = KEY_NULL;
+}
+
+void displayLayer(char layer) {
+  display.clearDisplay();
+
+  display.setTextSize(1);      // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE); // Draw white text
+  display.setCursor(0, 0);     // Start at top-left corner
+  display.cp437(true);         // Use full 256 char 'Code Page 437' font
+
+  switch (layer) {
+    case 'u':
+      display.println("Upper");
+      break;
+    case 'l':
+      display.println("Lower");
+      break;
+    default:
+      display.println("Base");
+  }
+
+  display.display();
 }
 
 void readMatrix() {
@@ -237,29 +271,23 @@ void printMatrix() {
 }
 
 void loop() {
-
   byte key = KEY_NULL;
+  byte rhKey;
 
   readMatrix();
   key = checkForKeypress();
 
-
   if (leftHandBoard) {
     Wire.requestFrom(RH_KBD_ADDRESS, 1);
     while (Wire.available()) { // peripheral may send less than requested
-      byte rhKey = Wire.read();
-      if (rhKey != KEY_NULL) {
-        Serial.print("RH-KBD: ");
-        Serial.println(rhKey);
-        key = rhKey;
-      }
+      rhKey = Wire.read();
+    }
+    if (rhKey != KEY_NULL) {
+      key = rhKey;
     }
   } else {
-    if (instruction == 0x01 || debugRHKBD) {
-      if (debugRHKBD) {
-        Serial.println(keyRHKBD);
-      }
-      instruction = 0xFF;
+    if (debugRHKBD) {
+      Serial.println(keyRHKBD);
     }
   }
 
@@ -270,75 +298,82 @@ void loop() {
       keyDown = true;
 
       if (!leftHandBoard) {
+        //this is the key value we will send to the master (left hand board) when it asks for it
         keyRHKBD = key;
       } else {
         bool transmitKey = false;
 
+        if (rhKey != KEY_NULL) {
+          Serial.print("RH-KBD: ");
+          Serial.println(rhKey);
+        } else {
+          Serial.print("LH-KBD: ");
+          Serial.println(key);
+        }
+
         switch (key) {
-        case KEY_LEFT_SHIFT:
-        case KEY_RIGHT_SHIFT:
-          if (capslock) {
-            capslock = false;
-          } else if (tapShift) {
-            capslock = true;
-            tapShift = false;
-          } else {
-            tapShift = true;
-          }
+          case KEY_LEFT_SHIFT:
+          case KEY_RIGHT_SHIFT:
+            if (capslock) {
+              capslock = false;
+            } else if (tapShift) {
+              capslock = true;
+              tapShift = false;
+            } else {
+              tapShift = true;
+            }
 
-          Wire.beginTransmission(RH_KBD_ADDRESS);
-          if (capslock) {
-            Wire.write(INSTRUCTION_CAPSLOCK_ON);
-          } else {
-            Wire.write(INSTRUCTION_CAPSLOCK_OFF);
-          }
-          Wire.endTransmission();
+            Wire.beginTransmission(RH_KBD_ADDRESS);
+            if (capslock) {
+              Wire.write(INSTRUCTION_CAPSLOCK_ON);
+            } else {
+              Wire.write(INSTRUCTION_CAPSLOCK_OFF);
+            }
+            Wire.endTransmission();
 
-          break;
-        case KEY_LEFT_GUI:
-        case KEY_RIGHT_GUI:
-          if (tapCmd) {
-            tapCmd = false;
-          } else {
-            tapCmd = true;
-          }
-          break;
-        case KEY_LAYER_UPPER:
-          if (activeLayer == 'b') {
-            activeLayer = 'u';
-            digitalWrite(RXLED, HIGH);
-          } else {
-            activeLayer = 'b';
-            digitalWrite(RXLED, LOW);
-            digitalWrite(TXLED, LOW);
-          }
+            break;
+          case KEY_LEFT_GUI:
+          case KEY_RIGHT_GUI:
+            if (tapCmd) {
+              tapCmd = false;
+            } else {
+              tapCmd = true;
+            }
+            break;
+          case KEY_LAYER_UP:
+          case KEY_LAYER_DOWN:
+            byte instruction;
 
-          Wire.beginTransmission(RH_KBD_ADDRESS);
-          if (activeLayer == 'u') {
-            Wire.write(INSTRUCTION_ACTIVELAYER_UPPER);
-          } else {
-            Wire.write(INSTRUCTION_ACTIVELAYER_BASE);
-          }
-          Wire.endTransmission();
+            if (key == KEY_LAYER_UP) {
+              if (activeLayer == 'b') {
+                activeLayer = 'u';
+                instruction = INSTRUCTION_ACTIVELAYER_UPPER;
+              }
+              if (activeLayer == 'l') {
+                activeLayer = 'b';
+                instruction = INSTRUCTION_ACTIVELAYER_BASE;
+              }
+            }
+            if (key == KEY_LAYER_DOWN) {
+              if (activeLayer == 'b') {
+                activeLayer = 'l';
+                instruction = INSTRUCTION_ACTIVELAYER_LOWER;
+              }
+              if (activeLayer == 'u') {
+                activeLayer = 'b';
+                instruction = INSTRUCTION_ACTIVELAYER_BASE;
+              }
+            }
 
-          break;
-        case KEY_LAYER_LOWER:
-          if (activeLayer == 'b') {
-            activeLayer = 'l';
-            digitalWrite(TXLED, HIGH);
-          } else {
-            activeLayer = 'b';
-            digitalWrite(RXLED, LOW);
-            digitalWrite(TXLED, LOW);
-          }
+            Wire.beginTransmission(RH_KBD_ADDRESS);
+            Wire.write(instruction);
+            Wire.endTransmission();
+            Serial.print("Layer: ");
+            Serial.println(activeLayer);
 
-          Wire.beginTransmission(RH_KBD_ADDRESS);
-          if (activeLayer == 'l') {
-            Wire.write(INSTRUCTION_ACTIVELAYER_LOWER);
-          } else {
-            Wire.write(INSTRUCTION_ACTIVELAYER_BASE);
-          }
-          Wire.endTransmission();
+            displayLayer(activeLayer);
+
+            break;
           default:
             transmitKey = true;
         }
@@ -363,8 +398,6 @@ void loop() {
           } else {
             Keyboard.write(key);
           }
-          
-          Serial.println(key);
 
           tapShift = false;
           tapCmd = false;
